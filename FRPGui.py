@@ -1,7 +1,12 @@
 # Fast-Reverse-Proxy GUI
 # A simple and efficient GUI for managing your FRP proxies, designed to be as lightweight and user-friendly as possible.
 # Author: Asanov Denis (ForterGames)
-# Version: 1.1
+# Version: 1.2
+
+# Requirements:
+# - Python 3.x
+# - Tkinter (usually included with Python)
+# - pystray (optional, for system tray support)
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -9,12 +14,20 @@ import os, re, subprocess, threading, sys, json
 import urllib.request
 import io 
 
+try:
+    import pystray
+    from PIL import Image, ImageDraw
+except ImportError:
+    pystray = None
+    Image = ImageDraw = None
+
 if os.name == 'nt':
     import winreg
 else:
     winreg = None
 
 SETTINGS_FILE = "frp_gui_config.json"
+TRAY_ICON_FILE = "frp_gui_icon.ico"
 
 # A cute cat gif to make the about tab more enjoyable while checking for updates. You can replace this URL with any other gif you like, just make sure it's not too large to load quickly. The current one is a small, looping cat gif from Giphy.
 GIF_URL = "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExenV3eHZrMGpzYmIyNWRkYXR4M24xa3YwM2kxcmlhNWJzaDlldXAwciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/G6TgcESZt8FFk8XV7K/giphy.gif"
@@ -22,8 +35,9 @@ GIF_URL = "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExenV3eHZrMGpzYmIyNWR
 class FrpcUltimateGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Fast-Reverse-Proxy GUI v1.1")
+        self.root.title("Fast-Reverse-Proxy GUI v1.2")
         self.root.geometry("600x650")
+        self.set_window_icon()
         
         self.filepath = tk.StringVar()
         self.frpc_exe = tk.StringVar()
@@ -31,15 +45,30 @@ class FrpcUltimateGUI:
         self.autostart_frp = tk.BooleanVar(value=False)
         self.windows_run = tk.BooleanVar(value=False)
         self.frpc_process = None
+        self.tray_icon = None
         
         self.load_settings()
         self.create_widgets()
+        self.setup_tray_icon()
         self.load_existing_proxies()
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         if self.autostart_frp.get():
             self.root.after(1000, self.start_frpc)
+
+    def set_window_icon(self):
+        if not os.path.exists(TRAY_ICON_FILE):
+            return
+        try:
+            if os.name == 'nt':
+                self.root.iconbitmap(TRAY_ICON_FILE)
+            else:
+                icon = tk.PhotoImage(file=TRAY_ICON_FILE)
+                self.root.iconphoto(True, icon)
+                self._icon_image = icon
+        except Exception:
+            pass
 
     def load_settings(self):
         if os.path.exists(SETTINGS_FILE):
@@ -321,15 +350,68 @@ class FrpcUltimateGUI:
     def update_log(self, text):
         self.log_area.config(state="normal"); self.log_area.insert("end", text); self.log_area.see("end"); self.log_area.config(state="disabled")
 
+    def create_tray_image(self):
+        if Image is None:
+            return None
+        try:
+            if os.path.exists(TRAY_ICON_FILE):
+                return Image.open(TRAY_ICON_FILE)
+        except Exception as e:
+            print(f"Tray icon load failed: {e}")
+
+        image = Image.new('RGB', (64, 64), color='#2196F3')
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((14, 10, 50, 22), fill='white')
+        draw.rectangle((14, 22, 26, 54), fill='white')
+        draw.rectangle((14, 38, 46, 50), fill='white')
+        return image
+
+    def setup_tray_icon(self):
+        if pystray is None or Image is None:
+            return
+        menu = pystray.Menu(
+            pystray.MenuItem('Restore', self.on_tray_restore),
+            pystray.MenuItem('Exit', self.on_tray_exit)
+        )
+        self.tray_icon = pystray.Icon('FRP GUI', icon=self.create_tray_image(), title='FRP GUI', menu=menu)
+        threading.Thread(target=self.tray_icon.run, daemon=True).start()
+
+    def show_window(self):
+        try:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.attributes('-topmost', True)
+            self.root.after(0, lambda: self.root.attributes('-topmost', False))
+        except Exception:
+            pass
+
+    def on_tray_restore(self, icon, item):
+        self.root.after(0, self.show_window)
+
+    def cleanup_and_exit(self):
+        if self.frpc_process:
+            self.frpc_process.terminate()
+        if self.tray_icon:
+            try:
+                self.tray_icon.stop()
+            except Exception:
+                pass
+        self.root.destroy()
+
+    def on_tray_exit(self, icon, item):
+        self.root.after(0, self.cleanup_and_exit)
+
+    def on_closing(self):
+        if self.tray_icon:
+            self.root.withdraw()
+            return
+        self.root.iconify()
+
     def stop_frpc(self):
         if self.frpc_process: self.frpc_process.terminate()
 
     def on_frpc_exit(self):
         self.btn_start.config(state="normal", bg="#2196F3"); self.btn_stop.config(state="disabled", bg="#9E9E9E"); self.frpc_process = None
-
-    def on_closing(self):
-        if self.frpc_process: self.frpc_process.terminate()
-        self.root.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()
