@@ -57,14 +57,19 @@ class FrpcUltimateGUI:
         if self.autostart_frp.get():
             self.root.after(1000, self.start_frpc)
 
+    def resource_path(self, relative_path):
+        base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__)))
+        return os.path.join(base_path, relative_path)
+
     def set_window_icon(self):
-        if not os.path.exists(TRAY_ICON_FILE):
+        icon_path = self.resource_path(TRAY_ICON_FILE)
+        if not os.path.exists(icon_path):
             return
         try:
             if os.name == 'nt':
-                self.root.iconbitmap(TRAY_ICON_FILE)
+                self.root.iconbitmap(icon_path)
             else:
-                icon = tk.PhotoImage(file=TRAY_ICON_FILE)
+                icon = tk.PhotoImage(file=icon_path)
                 self.root.iconphoto(True, icon)
                 self._icon_image = icon
         except Exception:
@@ -354,8 +359,9 @@ class FrpcUltimateGUI:
         if Image is None:
             return None
         try:
-            if os.path.exists(TRAY_ICON_FILE):
-                return Image.open(TRAY_ICON_FILE)
+            icon_path = self.resource_path(TRAY_ICON_FILE)
+            if os.path.exists(icon_path):
+                return Image.open(icon_path)
         except Exception as e:
             print(f"Tray icon load failed: {e}")
 
