@@ -1,3 +1,6 @@
+<img width="15%" height="15%" alt="icon-hi-res" src="https://github.com/user-attachments/assets/38d2c412-5595-44da-ae7f-55419df9d6de" />
+<br>
+
 # FRP-Gui
 A lightweight and user-friendly Tkinter GUI for managing FRP (Fast Reverse Proxy) clients and tunnels.
 
