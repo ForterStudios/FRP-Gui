@@ -1,8 +1,13 @@
+# Fast-Reverse-Proxy GUI
+# A simple and efficient GUI for managing your FRP proxies, designed to be as lightweight and user-friendly as possible.
+# Author: Asanov Denis (ForterGames)
+# Version: 1.1
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os, re, subprocess, threading, sys, json
 import urllib.request
-import base64
+import io 
 
 if os.name == 'nt':
     import winreg
@@ -11,17 +16,18 @@ else:
 
 SETTINGS_FILE = "frp_gui_config.json"
 
-# You can change Gif url to... Something. Though it actually shows only one frame, so yeah - it's a picture lol
-GIF_URL = "https://media1.tenor.com/m/FKkizy0WHJYAAAAC/jirniy-%D0%BA%D0%BE%D1%82.gif"
+# A cute cat gif to make the about tab more enjoyable while checking for updates. You can replace this URL with any other gif you like, just make sure it's not too large to load quickly. The current one is a small, looping cat gif from Giphy.
+GIF_URL = "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExenV3eHZrMGpzYmIyNWRkYXR4M24xa3YwM2kxcmlhNWJzaDlldXAwciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/G6TgcESZt8FFk8XV7K/giphy.gif"
 
 class FrpcUltimateGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Fast-Reverse-Proxy GUI v1.0")
+        self.root.title("Fast-Reverse-Proxy GUI v1.1")
         self.root.geometry("600x650")
         
         self.filepath = tk.StringVar()
         self.frpc_exe = tk.StringVar()
+        self.server_addr = tk.StringVar()
         self.autostart_frp = tk.BooleanVar(value=False)
         self.windows_run = tk.BooleanVar(value=False)
         self.frpc_process = None
@@ -42,17 +48,22 @@ class FrpcUltimateGUI:
                     data = json.load(f)
                     self.filepath.set(data.get("toml_path", "frpc.toml"))
                     self.frpc_exe.set(data.get("exe_path", "frpc.exe"))
+                    self.server_addr.set(data.get("server_addr", "127.0.0.1:7000"))
                     self.autostart_frp.set(data.get("autostart_frp", False))
                     self.windows_run.set(data.get("windows_run", False))
             except: pass
         else:
             self.filepath.set("frpc.toml")
             self.frpc_exe.set("frpc.exe" if os.name == 'nt' else "./frpc")
+            self.server_addr.set("127.0.0.1:7000")
+            self.autostart_frp.set(False)
+            self.windows_run.set(False)
 
-    def save_settings(self):
+    def save_settings(self, *args):
         data = {
             "toml_path": self.filepath.get(),
             "exe_path": self.frpc_exe.get(),
+            "server_addr": self.server_addr.get(),
             "autostart_frp": self.autostart_frp.get(),
             "windows_run": self.windows_run.get()
         }
@@ -84,9 +95,14 @@ class FrpcUltimateGUI:
         tk.Label(path_frame, text="FRPC EXE:").grid(row=1, column=0, sticky="w", pady=5)
         tk.Entry(path_frame, textvariable=self.frpc_exe).grid(row=1, column=1, sticky="ew", padx=5)
         tk.Button(path_frame, text="📁", command=self.browse_exe).grid(row=1, column=2)
+
+        tk.Label(path_frame, text="Server:").grid(row=2, column=0, sticky="w", pady=5)
+        server_entry = tk.Entry(path_frame, textvariable=self.server_addr)
+        server_entry.grid(row=2, column=1, columnspan=2, sticky="ew", padx=5)
+        server_entry.bind("<FocusOut>", lambda e: self.save_settings())
         
         check_frame = tk.Frame(path_frame)
-        check_frame.grid(row=2, column=0, columnspan=3, sticky="w", pady=5)
+        check_frame.grid(row=3, column=0, columnspan=3, sticky="w", pady=5)
         tk.Checkbutton(check_frame, text="Run at Windows Startup (Install executable from the Release tab I guess)", variable=self.windows_run, command=self.save_settings).pack(side="left", padx=5)
         tk.Checkbutton(check_frame, text="Autostart FRP", variable=self.autostart_frp, command=self.save_settings).pack(side="left", padx=20)
         path_frame.columnconfigure(1, weight=1)
@@ -132,7 +148,13 @@ class FrpcUltimateGUI:
         self.version_label = tk.Label(self.tab_about, text="Latest FRP Version: Checking GitHub...", font=("Arial", 10, "bold"), fg="#2196F3")
         self.version_label.pack(pady=5)
         
-        self.gif_label = tk.Label(self.tab_about, text="Loading image from internet...")
+        self.gif_label = tk.Label(
+            self.tab_about, 
+            text="Loading cat gif...", 
+            compound="top",
+            font=("Arial", 10, "italic"), 
+            fg="gray"
+        )
         self.gif_label.pack(pady=15)
         
         threading.Thread(target=self.fetch_about_data, daemon=True).start()
@@ -151,16 +173,20 @@ class FrpcUltimateGUI:
         try:
             req = urllib.request.Request(GIF_URL, headers={'User-Agent': 'Mozilla/5.0'})
             raw_data = urllib.request.urlopen(req, timeout=10).read()
-            b64_data = base64.b64encode(raw_data)            
+            
+            
+            gif_file = io.BytesIO(raw_data)
             
             frames = []
             idx = 0
             while True:
                 try:
-                    frame = tk.PhotoImage(data=b64_data, format=f"gif -index {idx}")
+                    
+                    frame = tk.PhotoImage(data=gif_file.getvalue(), format=f"gif -index {idx}")
                     frames.append(frame)
                     idx += 1
                 except tk.TclError:
+                    
                     break
             
             if frames:
@@ -169,11 +195,13 @@ class FrpcUltimateGUI:
                 self.root.after(0, self.start_gif_animation)
             else:
                 self.root.after(0, lambda: self.gif_label.config(text="No frames in GIF"))
-        except Exception:
+        except Exception as e:
+            
+            print(f"Error loading GIF: {e}")
             self.root.after(0, lambda: self.gif_label.config(text="Could not load GIF from internet"))
 
     def start_gif_animation(self):
-        self.gif_label.config(text="")
+        self.gif_label.config(text="Doing something cute with FRP...")
         self.animate_gif()
 
     def animate_gif(self):
@@ -195,6 +223,14 @@ class FrpcUltimateGUI:
         if not os.path.exists(self.filepath.get()): return
         try:
             with open(self.filepath.get(), "r", encoding="utf-8") as f: content = f.read()
+            s_addr_match = re.search(r'serverAddr\s*=\s*"([^"]+)"', content)
+            s_port_match = re.search(r'serverPort\s*=\s*(\d+)', content)
+            
+            if s_addr_match:
+                addr = s_addr_match.group(1)
+                port = s_port_match.group(1) if s_port_match else "7000"
+                self.server_addr.set(f"{addr}:{port}")
+                self.save_settings()
             blocks = content.split("[[proxies]]")[1:]
             for b in blocks:
                 n = re.search(r'name\s*=\s*"([^"]+)"', b)
@@ -207,25 +243,67 @@ class FrpcUltimateGUI:
     def add_proxy(self):
         name, lp, rp = self.name_v.get().strip(), self.lp_v.get().strip(), self.rp_v.get().strip()
         if not name or not lp.isdigit(): return
-        block = f'\n[[proxies]]\nname = "{name}"\ntype = "{self.type_v.get()}"\nlocalIP = "127.0.0.1"\nlocalPort = {lp}\nremotePort = {rp}\n'
-        with open(self.filepath.get(), "a", encoding="utf-8") as f: f.write(block)
+        
+        full_addr = self.server_addr.get().strip()
+        if ":" in full_addr:
+            s_host, s_port = full_addr.split(":", 1)
+            if not s_port.isdigit(): s_port = "7000"
+        else:
+            s_host, s_port = full_addr, "7000"
+
+        toml_file = self.filepath.get()
+        
+        existing_proxies = []
+        for item in self.tree.get_children():
+            values = self.tree.item(item)['values']
+            existing_proxies.append({
+                "name": values[0],
+                "type": values[1],
+                "lp": values[2],
+                "rp": values[3]
+            })
+            
+        existing_proxies.append({
+            "name": name,
+            "type": self.type_v.get(),
+            "lp": lp,
+            "rp": rp
+        })
+        
+        new_content = f'serverAddr = "{s_host}"\nserverPort = {s_port}\n'
+        for p in existing_proxies:
+            new_content += f'\n[[proxies]]\nname = "{p["name"]}"\ntype = "{p["type"]}"\nlocalIP = "127.0.0.1"\nlocalPort = {p["lp"]}\nremotePort = {p["rp"]}\n'
+            
+        with open(toml_file, "w", encoding="utf-8") as f:
+            f.write(new_content)
+            
         self.name_v.set(""); self.lp_v.set(""); self.load_existing_proxies()
 
     def delete_proxy(self):
         sel = self.tree.selection()
         if not sel: return
-        name = self.tree.item(sel[0])['values'][0]
-        if not messagebox.askyesno("?", f"Delete {name}?"): return
-        with open(self.filepath.get(), "r", encoding="utf-8") as f: lines = f.readlines()
-        new_lines, skip, i = [], False, 0
-        while i < len(lines):
-            if "[[proxies]]" in lines[i]:
-                if f'name = "{name}"' in "".join(lines[i:i+10]): skip = True; i += 1; continue
-            if skip:
-                if i < len(lines) and ("[[proxies]]" in lines[i] or lines[i].startswith("[")): skip = False
-                else: i += 1; continue
-            new_lines.append(lines[i]); i += 1
-        with open(self.filepath.get(), "w", encoding="utf-8") as f: f.writelines(new_lines)
+        target_name = self.tree.item(sel[0])['values'][0]
+        if not messagebox.askyesno("?", f"Delete {target_name}?"): return
+        
+        full_addr = self.server_addr.get().strip()
+        if ":" in full_addr:
+            s_host, s_port = full_addr.split(":", 1)
+            if not s_port.isdigit(): s_port = "7000"
+        else:
+            s_host, s_port = full_addr, "7000"
+            
+        toml_file = self.filepath.get()
+        
+        new_content = f'serverAddr = "{s_host}"\nserverPort = {s_port}\n'
+        for item in self.tree.get_children():
+            values = self.tree.item(item)['values']
+            if str(values[0]) == str(target_name):
+                continue
+            new_content += f'\n[[proxies]]\nname = "{values[0]}"\ntype = "{values[1]}"\nlocalIP = "127.0.0.1"\nlocalPort = {values[2]}\nremotePort = {values[3]}\n'
+            
+        with open(toml_file, "w", encoding="utf-8") as f:
+            f.write(new_content)
+            
         self.load_existing_proxies()
 
     def start_frpc(self):
