@@ -10,7 +10,6 @@ A lightweight and user-friendly Tkinter GUI for managing FRP (Fast Reverse Proxy
 * **Automation:** Supports launching the application on Windows startup and automatically starting the FRP client execution.
 * **Real-time Logging:** Displays live `frpc` process output and logs in a dedicated tab.
 * **Version Tracking:** Automatically fetches and displays the latest available FRP release version using the GitHub API.
-* **Status Indication:** Asynchronously loads an animated loading indicator from the internet within the About section.
 
 ## Program Windows
 <p align="center">
