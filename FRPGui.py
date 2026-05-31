@@ -1,7 +1,7 @@
 # Fast-Reverse-Proxy GUI
 # A simple and efficient GUI for managing your FRP proxies, designed to be as lightweight and user-friendly as possible.
 # Author: Asanov Denis (ForterGames)
-# Version: 1.2
+# Version: 1.3
 
 # Requirements:
 # - Python 3.x
@@ -10,7 +10,7 @@
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import os, re, subprocess, threading, sys, json
+import os, re, subprocess, threading, sys, json, random
 import urllib.request
 import io 
 
@@ -30,15 +30,16 @@ SETTINGS_FILE = "frp_gui_config.json"
 TRAY_ICON_FILE = "frp_gui_icon.ico"
 
 # A cute cat gif to make the about tab more enjoyable while checking for updates. You can replace this URL with any other gif you like, just make sure it's not too large to load quickly. The current one is a small, looping cat gif from Giphy.
-GIF_URL = "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExenV3eHZrMGpzYmIyNWRkYXR4M24xa3YwM2kxcmlhNWJzaDlldXAwciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/G6TgcESZt8FFk8XV7K/giphy.gif"
+GIF_URL = "https://media.tenor.com/GQAsycjoZG8AAAAj/scuba-scuba-cat.gif"
 
 class FrpcUltimateGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Fast-Reverse-Proxy GUI v1.2")
+        self.root.title("Fast-Reverse-Proxy GUI v1.3")
         self.root.geometry("600x650")
         self.set_window_icon()
         
+        # Paths and flags tracked by the GUI (kitten-approved settings)
         self.filepath = tk.StringVar()
         self.frpc_exe = tk.StringVar()
         self.server_addr = tk.StringVar()
@@ -46,6 +47,33 @@ class FrpcUltimateGUI:
         self.windows_run = tk.BooleanVar(value=False)
         self.frpc_process = None
         self.tray_icon = None
+        # Search state for the Proxy List (paws to filter!)
+        self.search_v = tk.StringVar()
+        self.proxies = []
+        self.sort_by = None
+        self.sort_reverse = False
+        self.col_headers = {'n':'Name', 't':'Type', 'lp':'L.Port', 'rp':'R.Port'}
+        self.gif_texts = [
+            "Doing something cute with FRP...",
+            "Cats love tunneling packets.",
+            "Port forwarding, but make it cozy.",
+            "Keep calm and forward ports.",
+            "Configured with a purr-sonal touch.",
+            "Randomizing fun facts...",
+            "Did you know? Cats can jump up to 6 times their body length!",
+            "FRP is faster than a cat on a hot tin roof!",
+            "Just a cat managing your proxies.",
+            "This cat approves of your FRP setup!",
+            "Cats are the best sysadmins, they just nap while everything runs smoothly.",
+            "Catchy proxy management, isn't it?",
+            "If this cat can manage FRP, so can you!",
+            "Paws-itively the best FRP GUI out there!",
+            "This cat is forwarding ports and taking names.",
+            "FRP configuration: 100% cat-approved!",
+            "Cats and FRP: a purr-fect combination for your networking needs.",
+            "This cat is the real MVP of your FRP setup.",
+            "Port forwarding has never been this adorable!"
+        ]
         
         self.load_settings()
         self.create_widgets()
@@ -60,6 +88,7 @@ class FrpcUltimateGUI:
     def resource_path(self, relative_path):
         base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__)))
         return os.path.join(base_path, relative_path)
+    # resource_path: find files bundled with the app (very curious cat)
 
     def set_window_icon(self):
         icon_path = self.resource_path(TRAY_ICON_FILE)
@@ -119,6 +148,7 @@ class FrpcUltimateGUI:
         except: pass
 
     def create_widgets(self):
+        # Settings area — where the human feeds configuration treats
         path_frame = tk.LabelFrame(self.root, text=" Settings ", padx=10, pady=5)
         path_frame.pack(fill="x", padx=10, pady=5)
 
@@ -145,9 +175,11 @@ class FrpcUltimateGUI:
         self.nb.pack(fill="both", expand=True, padx=10, pady=5)
         self.tab_manage = ttk.Frame(self.nb); self.tab_logs = ttk.Frame(self.nb); self.tab_about = ttk.Frame(self.nb)
         self.nb.add(self.tab_manage, text=" Ports Manager "); self.nb.add(self.tab_logs, text=" FRP Logs "); self.nb.add(self.tab_about, text=" About ")
+        # Create the three main tabs: manage, logs, about (cat naps included)
         self.setup_manage_tab(); self.setup_logs_tab(); self.setup_about_tab()
 
     def setup_manage_tab(self):
+        # Add proxy area — humans add ports here, cat inspects
         add_f = tk.LabelFrame(self.tab_manage, text=" New Proxy ", padx=10, pady=10)
         add_f.pack(fill="x", padx=5, pady=5)
         self.name_v = tk.StringVar(); self.type_v = tk.StringVar(value="tcp"); self.lp_v = tk.StringVar(); self.rp_v = tk.StringVar()
@@ -158,15 +190,29 @@ class FrpcUltimateGUI:
         self.lp_v.trace_add("write", lambda *a: self.rp_v.set(self.lp_v.get()))
         tk.Button(add_f, text="➕ ADD", bg="#009F05", fg="white", command=self.add_proxy).grid(row=0, column=8, padx=10)
 
+        # Proxy List frame — pawsitive list of configured proxies
         list_f = tk.LabelFrame(self.tab_manage, text=" Proxy List ")
         list_f.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Search bar — mew-sical filter for the proxy list
+        sf = tk.Frame(list_f)
+        sf.pack(fill="x", padx=5, pady=(5,0))
+        tk.Label(sf, text="Search:").pack(side="left")
+        tk.Entry(sf, textvariable=self.search_v).pack(side="left", fill="x", expand=True, padx=5)
+        tk.Button(sf, text="Clear", command=lambda: self.search_v.set("")).pack(side="right")
+        self.search_v.trace_add("write", lambda *a: self.refresh_tree())
+
+        # Treeview shows proxies; headings are clickable to sort (like Explorer)
         self.tree = ttk.Treeview(list_f, columns=("n","t","lp","rp"), show="headings")
-        for c, h in zip(("n","t","lp","rp"), ("Name", "Type", "L.Port", "R.Port")): self.tree.heading(c, text=h); self.tree.column(c, width=80)
+        for c, h in zip(("n","t","lp","rp"), ("Name", "Type", "L.Port", "R.Port")):
+            self.tree.heading(c, text=h, command=lambda col=c: self.sort_by_column(col))
+            self.tree.column(c, width=80)
         self.tree.pack(fill="both", expand=True, side="left")
         sc = ttk.Scrollbar(list_f, command=self.tree.yview); sc.pack(side="right", fill="y"); self.tree.configure(yscrollcommand=sc.set)
         tk.Button(self.tab_manage, text="🗑 Delete Selected", bg="#ff1100", fg="white", command=self.delete_proxy).pack(pady=5)
 
     def setup_logs_tab(self):
+        # FRP controls and log output (watch the tail!)
         ctrl = tk.Frame(self.tab_logs, pady=5)
         ctrl.pack(fill="x")
         self.btn_start = tk.Button(ctrl, text="> START FRP <", bg="#2196F3", fg="white", width=15, command=self.start_frpc)
@@ -182,6 +228,7 @@ class FrpcUltimateGUI:
         self.version_label = tk.Label(self.tab_about, text="Latest FRP Version: Checking GitHub...", font=("Arial", 10, "bold"), fg="#2196F3")
         self.version_label.pack(pady=5)
         
+        # About tab: cute gif and a tiny motivational cat message
         self.gif_label = tk.Label(
             self.tab_about, 
             text="Loading cat gif...", 
@@ -200,6 +247,7 @@ class FrpcUltimateGUI:
             resp = urllib.request.urlopen(req, timeout=5).read()
             data = json.loads(resp)
             version = data.get("tag_name", "Unknown")
+            # update version label on the main thread (gentle purr)
             self.root.after(0, lambda: self.version_label.config(text=f"Latest FRP Version: {version}", fg="#009F05"))
         except Exception:
             self.root.after(0, lambda: self.version_label.config(text="Latest FRP Version: Unavailable (Network error)", fg="#ff1100"))
@@ -223,6 +271,7 @@ class FrpcUltimateGUI:
                     
                     break
             
+            # store frames and start animation (catnip engaged)
             if frames:
                 self.gif_frames = frames
                 self.current_frame = 0
@@ -235,14 +284,30 @@ class FrpcUltimateGUI:
             self.root.after(0, lambda: self.gif_label.config(text="Could not load GIF from internet"))
 
     def start_gif_animation(self):
-        self.gif_label.config(text="Doing something cute with FRP...")
         self.animate_gif()
+        try:
+            self.randomize_gif_text()
+        except Exception:
+            pass
 
     def animate_gif(self):
         if hasattr(self, 'gif_frames') and self.gif_frames:
             self.gif_label.config(image=self.gif_frames[self.current_frame])
             self.current_frame = (self.current_frame + 1) % len(self.gif_frames)
             self.root.after(100, self.animate_gif)
+            # continue animating — loop like a playful kitten
+
+    def randomize_gif_text(self):
+        try:
+            if hasattr(self, 'gif_texts') and self.gif_texts:
+                text = random.choice(self.gif_texts)
+                self.gif_label.config(text=text)
+        except Exception:
+            pass
+        try:
+            self.root.after(4000, self.randomize_gif_text)
+        except Exception:
+            pass
 
     def browse_toml(self):
         f = filedialog.askopenfilename(filetypes=[("TOML", "*.toml")]);
@@ -253,6 +318,7 @@ class FrpcUltimateGUI:
         if f: self.frpc_exe.set(f); self.save_settings()
 
     def load_existing_proxies(self):
+        self.proxies = []
         for i in self.tree.get_children(): self.tree.delete(i)
         if not os.path.exists(self.filepath.get()): return
         try:
@@ -271,8 +337,61 @@ class FrpcUltimateGUI:
                 t = re.search(r'type\s*=\s*"([^"]+)"', b)
                 lp = re.search(r'localPort\s*=\s*(\d+)', b)
                 rp = re.search(r'remotePort\s*=\s*(\d+)', b)
-                if n: self.tree.insert("", "end", values=(n.group(1), t.group(1) if t else "tcp", lp.group(1) if lp else "", rp.group(1) if rp else ""))
+                if n:
+                    self.proxies.append({
+                        "name": n.group(1),
+                        "type": t.group(1) if t else "tcp",
+                        "lp": lp.group(1) if lp else "",
+                        "rp": rp.group(1) if rp else ""
+                    })
+            self.refresh_tree()
         except: pass
+
+    # refresh_tree: repopulate the visible list from `self.proxies`
+    def refresh_tree(self):
+        for i in self.tree.get_children(): self.tree.delete(i)
+        self.update_heading_indicators()
+        q = (self.search_v.get() or "").lower().strip()
+        items = self.proxies[:]
+        if q:
+            def matches(p):
+                return q in str(p.get('name','')).lower() or q in str(p.get('type','')).lower() or q in str(p.get('lp','')).lower() or q in str(p.get('rp','')).lower()
+            items = [p for p in items if matches(p)]
+
+        if self.sort_by:
+            col_map = {'n':'name', 't':'type', 'lp':'lp', 'rp':'rp'}
+            key = col_map.get(self.sort_by, self.sort_by)
+            if key in ('lp','rp'):
+                def kf(x):
+                    try: return int(x.get(key) or 0)
+                    except: return 0
+            else:
+                def kf(x):
+                    return str(x.get(key,'')).lower()
+            items.sort(key=kf, reverse=self.sort_reverse)
+
+        for p in items:
+            self.tree.insert("", "end", values=(p.get('name'), p.get('type'), p.get('lp'), p.get('rp')))
+
+    def sort_by_column(self, col):
+        if self.sort_by == col:
+            self.sort_reverse = not self.sort_reverse
+        else:
+            self.sort_by = col
+            self.sort_reverse = False
+        self.refresh_tree()
+
+    def update_heading_indicators(self):
+        for col, base in self.col_headers.items():
+            arrow = ''
+            if self.sort_by == col:
+                arrow = ' ▲' if not self.sort_reverse else ' ▼'
+            try:
+                self.tree.heading(col, text=f"{base}{arrow}")
+            except Exception:
+                pass
+
+    # add_proxy / delete_proxy: modify the TOML and refresh the list (human-friendly)
 
     def add_proxy(self):
         name, lp, rp = self.name_v.get().strip(), self.lp_v.get().strip(), self.rp_v.get().strip()
